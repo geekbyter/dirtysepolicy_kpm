@@ -1,4 +1,5 @@
 DIRTYDUCK_VERSION := 0.1.4
+DIRTYDUCK_HOTPATCH_KP0112 ?= 0
 
 ifndef KP_DIR
     KP_DIR = ../KernelPatch
@@ -24,7 +25,7 @@ else ifdef NDK_PATH
 endif
 
 CFLAGS = -Wall -Wno-typedef-redefinition -O2 -fno-PIC -fno-asynchronous-unwind-tables -fno-stack-protector -fno-common
-CFLAGS += -DDIRTYDUCK_VERSION_VALUE=$(DIRTYDUCK_VERSION) -std=gnu99
+CFLAGS += -DDIRTYDUCK_VERSION_VALUE=$(DIRTYDUCK_VERSION) -DDIRTYDUCK_HOTPATCH_KP0112=$(DIRTYDUCK_HOTPATCH_KP0112) -std=gnu99
 
 INCLUDE_DIRS := . include patch/include linux linux/include linux/security/selinux/include linux/arch/arm64/include linux/tools/arch/arm64/include
 

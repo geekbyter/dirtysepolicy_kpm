@@ -1,5 +1,6 @@
 DIRTYDUCK_VERSION := 0.1.4
 SMOKE_VERSION := 0.1.0
+DIRTYDUCK_HOTPATCH_KP0112 ?= 0
 
 KP_DIR ?= $(CURDIR)/KernelPatch
 SUBMAKE_VARS := KP_DIR=$(abspath $(KP_DIR)) \
@@ -13,7 +14,7 @@ SUBMAKE_VARS := KP_DIR=$(abspath $(KP_DIR)) \
 all: smoke dirtyduck
 
 dirtyduck:
-	$(MAKE) -C dirtyduck $(SUBMAKE_VARS) DIRTYDUCK_VERSION=$(DIRTYDUCK_VERSION)
+	$(MAKE) -C dirtyduck $(SUBMAKE_VARS) DIRTYDUCK_VERSION=$(DIRTYDUCK_VERSION) DIRTYDUCK_HOTPATCH_KP0112=$(DIRTYDUCK_HOTPATCH_KP0112)
 	cp dirtyduck/dirtyduck_selinux_$(DIRTYDUCK_VERSION).kpm .
 
 smoke:

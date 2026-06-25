@@ -574,17 +574,17 @@ static void after_sel_mmap_handle_status(hook_fargs2_t *a, void *u);
 static void before_selinux_status_update_seqlock(hook_fargs4_t *a, void *u);
 static void before_selinux_status_update_policyload(hook_fargs4_t *a, void *u);
 
-#ifndef DIRTYDUCK_HOTPATCH_0112
-#define DIRTYDUCK_HOTPATCH_0112 1
+#ifndef DIRTYDUCK_HOTPATCH_KP0112
+#define DIRTYDUCK_HOTPATCH_KP0112 0
 #endif
 
-#if DIRTYDUCK_HOTPATCH_0112
-/* KernelPatch 0.11.2 exports kp_insn_patch_text() in hotpatch.h. */
+#if DIRTYDUCK_HOTPATCH_KP0112
+/* KernelPatch 0.11.2 exports this name instead of hotpatch_nosync(). */
 extern int kp_insn_patch_text(void *addrs[], uint32_t values[], int cnt);
 #define dirtyduck_patch_text kp_insn_patch_text
 #else
-extern int hotpatch(void *addrs[], uint32_t values[], int cnt);
-#define dirtyduck_patch_text hotpatch
+/* Keep the original working KPM path for newer KernelPatch/SuKiSU builds. */
+extern int hotpatch_nosync(void *addr, uint32_t value);
 #endif
 
 /*
@@ -2658,20 +2658,29 @@ static int hotpatch_write_op_slot(sel_write_op_fn *slot, sel_write_op_fn value,
     if (old_value)
         *old_value = (sel_write_op_fn)old_raw;
 
+#if DIRTYDUCK_HOTPATCH_KP0112
     {
-        void *addrs[2] = {
-            (void *)slot,
-            (void *)((unsigned long)slot + sizeof(uint32_t)),
-        };
-        uint32_t values[2] = {
-            (uint32_t)new_raw,
-            (uint32_t)(new_raw >> 32),
-        };
+        void *addrs[2];
+        uint32_t values[2];
+
+        addrs[0] = (void *)slot;
+        addrs[1] = (void *)((unsigned long)slot + sizeof(uint32_t));
+        values[0] = (uint32_t)new_raw;
+        values[1] = (uint32_t)(new_raw >> 32);
 
         rc = dirtyduck_patch_text(addrs, values, 2);
-        if (rc)
-            return rc;
     }
+#else
+    rc = hotpatch_nosync((void *)slot, (uint32_t)new_raw);
+    if (!rc) {
+        rc = hotpatch_nosync((void *)((unsigned long)slot + sizeof(uint32_t)),
+                             (uint32_t)(new_raw >> 32));
+        if (rc)
+            hotpatch_nosync((void *)slot, (uint32_t)old_raw);
+    }
+#endif
+    if (rc)
+        return rc;
 
     return 0;
 }

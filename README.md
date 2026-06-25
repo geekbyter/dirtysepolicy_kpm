@@ -50,16 +50,22 @@ The artifact contains:
 - `dirtyduck_smoke_0.1.0.kpm`
 - `dirtyduck_selinux_0.1.4.kpm`
 
-The workflow downloads KernelPatch `0.11.2`, installs Android NDK
-`29.0.14206865`, then runs the root `Makefile`.
+The workflow downloads KernelPatch commit
+`0ceeeb968bef86b48af68640af8b135215dc3399`, which matches the newer
+`hotpatch_nosync` API used by the original working DirtySepolicy KPM path. It
+then installs Android NDK `29.0.14206865` and runs the root `Makefile`.
+
+If you intentionally build against older KernelPatch `0.11.2`, pass
+`DIRTYDUCK_HOTPATCH_KP0112=1`; otherwise the produced KPM may compile but fail
+to load on devices whose KernelPatch export table expects `hotpatch_nosync`.
 
 ## Local Build
 
 ```sh
 cd dirtysepolicy_kpm
 
-# Option A: place KernelPatch beside this README.
-curl -L https://github.com/bmax121/KernelPatch/archive/refs/tags/0.11.2.tar.gz -o KernelPatch.tar.gz
+# Option A: place the matching KernelPatch SDK beside this README.
+curl -L https://github.com/bmax121/KernelPatch/archive/0ceeeb968bef86b48af68640af8b135215dc3399.tar.gz -o KernelPatch.tar.gz
 mkdir -p KernelPatch
 tar xzf KernelPatch.tar.gz --strip-components=1 -C KernelPatch
 

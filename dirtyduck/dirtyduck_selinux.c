@@ -574,6 +574,19 @@ static void after_sel_mmap_handle_status(hook_fargs2_t *a, void *u);
 static void before_selinux_status_update_seqlock(hook_fargs4_t *a, void *u);
 static void before_selinux_status_update_policyload(hook_fargs4_t *a, void *u);
 
+#ifndef DIRTYDUCK_HOTPATCH_0112
+#define DIRTYDUCK_HOTPATCH_0112 1
+#endif
+
+#if DIRTYDUCK_HOTPATCH_0112
+/* KernelPatch 0.11.2 exports kp_insn_patch_text() in hotpatch.h. */
+extern int kp_insn_patch_text(void *addrs[], uint32_t values[], int cnt);
+#define dirtyduck_patch_text kp_insn_patch_text
+#else
+extern int hotpatch(void *addrs[], uint32_t values[], int cnt);
+#define dirtyduck_patch_text hotpatch
+#endif
+
 /*
  * Patch the seqno field (5th whitespace-separated token, formatted as "%u")
  * in a /sys/fs/selinux/access response buffer to new_seqno.
@@ -2645,15 +2658,19 @@ static int hotpatch_write_op_slot(sel_write_op_fn *slot, sel_write_op_fn value,
     if (old_value)
         *old_value = (sel_write_op_fn)old_raw;
 
-    rc = hotpatch_nosync((void *)slot, (uint32_t)new_raw);
-    if (rc)
-        return rc;
+    {
+        void *addrs[2] = {
+            (void *)slot,
+            (void *)((unsigned long)slot + sizeof(uint32_t)),
+        };
+        uint32_t values[2] = {
+            (uint32_t)new_raw,
+            (uint32_t)(new_raw >> 32),
+        };
 
-    rc = hotpatch_nosync((void *)((unsigned long)slot + sizeof(uint32_t)),
-                         (uint32_t)(new_raw >> 32));
-    if (rc) {
-        hotpatch_nosync((void *)slot, (uint32_t)old_raw);
-        return rc;
+        rc = dirtyduck_patch_text(addrs, values, 2);
+        if (rc)
+            return rc;
     }
 
     return 0;

@@ -31,7 +31,13 @@
 #include <kputils.h>
 
 #ifndef DIRTYDUCK_VERSION
+#define KPM_STR2(x) #x
+#define KPM_STR(x) KPM_STR2(x)
+#ifdef DIRTYDUCK_VERSION_VALUE
+#define DIRTYDUCK_VERSION KPM_STR(DIRTYDUCK_VERSION_VALUE)
+#else
 #define DIRTYDUCK_VERSION "0.1.4"
+#endif
 #endif
 
 #ifndef DIRTYDUCK_FAST_INIT

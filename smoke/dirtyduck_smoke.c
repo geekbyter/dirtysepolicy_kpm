@@ -3,7 +3,13 @@
 #include <kpmodule.h>
 
 #ifndef SMOKE_VERSION
+#define KPM_STR2(x) #x
+#define KPM_STR(x) KPM_STR2(x)
+#ifdef SMOKE_VERSION_VALUE
+#define SMOKE_VERSION KPM_STR(SMOKE_VERSION_VALUE)
+#else
 #define SMOKE_VERSION "0.1.0"
+#endif
 #endif
 
 KPM_NAME("dirtyduck_smoke");

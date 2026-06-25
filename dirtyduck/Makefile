@@ -23,8 +23,8 @@ else ifdef NDK_PATH
     LD := $(NDK_PATH)/ld.lld
 endif
 
-CFLAGS = -Wall -O2 -fno-PIC -fno-asynchronous-unwind-tables -fno-stack-protector -fno-common -DDIRTYDUCK_VERSION=\"$(DIRTYDUCK_VERSION)\"
-CFLAGS += -std=gnu99
+CFLAGS = -Wall -Wno-typedef-redefinition -O2 -fno-PIC -fno-asynchronous-unwind-tables -fno-stack-protector -fno-common
+CFLAGS += -DDIRTYDUCK_VERSION_VALUE=$(DIRTYDUCK_VERSION) -std=gnu99
 
 INCLUDE_DIRS := . include patch/include linux linux/include linux/security/selinux/include linux/arch/arm64/include linux/tools/arch/arm64/include
 
@@ -38,6 +38,9 @@ dirtyduck_selinux_$(DIRTYDUCK_VERSION).kpm: ${objs}
 	${CC} -r -nostdlib -o $@ $^
 
 %.o: %.c
+ifndef CC
+	$(error No compiler found. Set ANDROID_NDK_HOME, ANDROID_NDK, ANDROID_NDK_LATEST_HOME, or TARGET_COMPILE)
+endif
 	${CC} $(CFLAGS) $(INCLUDE_FLAGS) -c -o $@ $<
 
 .PHONY: clean

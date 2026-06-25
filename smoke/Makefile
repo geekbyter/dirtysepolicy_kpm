@@ -21,8 +21,8 @@ else ifdef NDK_PATH
     CC := $(NDK_PATH)/aarch64-linux-android31-clang
 endif
 
-CFLAGS = -Wall -O2 -fno-PIC -fno-asynchronous-unwind-tables -fno-stack-protector -fno-common -DSMOKE_VERSION=\"$(SMOKE_VERSION)\"
-CFLAGS += -std=gnu99
+CFLAGS = -Wall -Wno-typedef-redefinition -O2 -fno-PIC -fno-asynchronous-unwind-tables -fno-stack-protector -fno-common
+CFLAGS += -DSMOKE_VERSION_VALUE=$(SMOKE_VERSION) -std=gnu99
 
 INCLUDE_DIRS := . include patch/include linux linux/include linux/security/selinux/include linux/arch/arm64/include linux/tools/arch/arm64/include
 INCLUDE_FLAGS := $(foreach dir,$(INCLUDE_DIRS),-I$(KP_DIR)/kernel/$(dir))
@@ -35,6 +35,9 @@ dirtyduck_smoke_$(SMOKE_VERSION).kpm: ${objs}
 	${CC} -r -nostdlib -o $@ $^
 
 %.o: %.c
+ifndef CC
+	$(error No compiler found. Set ANDROID_NDK_HOME, ANDROID_NDK, ANDROID_NDK_LATEST_HOME, or TARGET_COMPILE)
+endif
 	${CC} $(CFLAGS) $(INCLUDE_FLAGS) -c -o $@ $<
 
 .PHONY: clean

@@ -1,0 +1,72 @@
+name: Build DirtySepolicy KPM
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "**/*.c"
+      - "**/*.h"
+      - "**/Makefile"
+      - ".github/workflows/build-kpm.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      KERNELPATCH_REF: "0.11.2"
+      NDK_VERSION: "29.0.14206865"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve project directory
+        shell: bash
+        run: |
+          if [ -f Makefile ] && [ -d dirtyduck ] && [ -d smoke ]; then
+            echo "PROJECT_DIR=$PWD" >> "$GITHUB_ENV"
+          elif [ -d dirtysepolicy_kpm ]; then
+            echo "PROJECT_DIR=$PWD/dirtysepolicy_kpm" >> "$GITHUB_ENV"
+          else
+            echo "Cannot find dirtysepolicy_kpm project directory" >&2
+            exit 1
+          fi
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        shell: bash
+        run: sdkmanager "ndk;${NDK_VERSION}"
+
+      - name: Download KernelPatch SDK
+        shell: bash
+        run: |
+          set -eux
+          curl -L "https://github.com/bmax121/KernelPatch/archive/refs/tags/${KERNELPATCH_REF}.tar.gz" -o KernelPatch.tar.gz
+          mkdir -p KernelPatch
+          tar xzf KernelPatch.tar.gz --strip-components=1 -C KernelPatch
+
+      - name: Build KPM modules
+        shell: bash
+        run: |
+          set -eux
+          make -C "$PROJECT_DIR" \
+            KP_DIR="$GITHUB_WORKSPACE/KernelPatch" \
+            ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${NDK_VERSION}"
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p artifacts
+          find "$PROJECT_DIR" -name "*.kpm" -type f -print -exec cp {} artifacts/ \;
+          ls -l artifacts
+
+      - name: Upload KPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dirtysepolicy-kpm
+          path: artifacts/*.kpm
+          if-no-files-found: error

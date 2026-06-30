@@ -36,7 +36,7 @@
 #ifdef DIRTYDUCK_VERSION_VALUE
 #define DIRTYDUCK_VERSION KPM_STR(DIRTYDUCK_VERSION_VALUE)
 #else
-#define DIRTYDUCK_VERSION "0.1.4"
+#define DIRTYDUCK_VERSION "0.1.5"
 #endif
 #endif
 
@@ -464,6 +464,7 @@ static raw_spinlock_t g_policy_cache_lock = { .raw_lock = ATOMIC_INIT(0) };
 static u32 g_bypass_policy_log_count;
 static u32 g_internal_policy_load_depth;
 static u32 g_procattr_current_count;
+static u32 g_procattr_nonstock_block_count;
 static u32 g_setprocattr_probe_count;
 static u32 g_selinux_setprocattr_probe_count;
 static bool g_clean_policydb_av_disabled;
@@ -1958,6 +1959,105 @@ static bool legacy_should_block_access_query(const char *query, size_t len)
     return false;
 }
 
+static bool context_type_eq_lit(const char *type, size_t type_len,
+                                const char *lit, size_t lit_len)
+{
+    size_t i;
+
+    if (!type || !lit || type_len != lit_len)
+        return false;
+
+    for (i = 0; i < type_len; i++) {
+        if (!ascii_lower_eq(type[i], lit[i]))
+            return false;
+    }
+
+    return true;
+}
+
+#define context_type_eq_literal(type, type_len, lit) \
+    context_type_eq_lit((type), (type_len), (lit), sizeof(lit) - 1)
+
+/*
+ * /proc/.../attr/current 接收单个完整 SELinux context。这里只精确匹配 type
+ * 字段，不扫描包列表、不读取系统属性，也不使用宽泛子串，避免把普通上下文误判
+ * 为 Root 框架上下文。
+ */
+static bool procattr_has_explicit_nonstock_type(const char *query, size_t len)
+{
+    const char *ctx;
+    const char *type;
+    size_t offset;
+    size_t ctx_len;
+    size_t first = (size_t)-1;
+    size_t second = (size_t)-1;
+    size_t third = (size_t)-1;
+    size_t type_len;
+    size_t i;
+
+    if (!query || !len)
+        return false;
+
+    ctx = skip_spaces(query);
+    if (!ctx || !*ctx)
+        return false;
+
+    offset = (size_t)(ctx - query);
+    if (offset >= len)
+        return false;
+
+    ctx_len = token_len(ctx);
+    if (!ctx_len || ctx_len > len - offset)
+        return false;
+
+    /* Only trailing whitespace is valid after the single context token. */
+    for (i = offset + ctx_len; i < len; i++) {
+        if (query[i] != ' ')
+            return false;
+    }
+
+    for (i = 0; i < ctx_len; i++) {
+        if (ctx[i] != ':')
+            continue;
+        if (first == (size_t)-1)
+            first = i;
+        else if (second == (size_t)-1)
+            second = i;
+        else {
+            third = i;
+            break;
+        }
+    }
+
+    if (first == (size_t)-1 || second == (size_t)-1 ||
+        third == (size_t)-1 || first == 0 || second <= first + 1 ||
+        third <= second + 1 || third + 1 >= ctx_len)
+        return false;
+
+    type = ctx + second + 1;
+    type_len = third - second - 1;
+
+    return context_type_eq_literal(type, type_len, "magisk") ||
+           context_type_eq_literal(type, type_len, "magisk_file") ||
+           context_type_eq_literal(type, type_len, "kitsune") ||
+           context_type_eq_literal(type, type_len, "apatch") ||
+           context_type_eq_literal(type, type_len, "ksu") ||
+           context_type_eq_literal(type, type_len, "kernelsu") ||
+           context_type_eq_literal(type, type_len, "ksu_file") ||
+           context_type_eq_literal(type, type_len, "lsposed") ||
+           context_type_eq_literal(type, type_len, "lsposed_file") ||
+           context_type_eq_literal(type, type_len, "xposed") ||
+           context_type_eq_literal(type, type_len, "xposed_data") ||
+           context_type_eq_literal(type, type_len, "riru") ||
+           context_type_eq_literal(type, type_len, "adbroot") ||
+           context_type_eq_literal(type, type_len, "supersu") ||
+           context_type_eq_literal(type, type_len, "supolicy") ||
+           context_type_eq_literal(type, type_len, "zygisk") ||
+           context_type_eq_literal(type, type_len, "droidspacesd") ||
+           context_type_eq_literal(type, type_len, "msd_daemon") ||
+           context_type_eq_literal(type, type_len, "msd_app");
+}
+
 static bool query_has_pair(const char *query, size_t len,
                            const char *scon, const char *tcon)
 {
@@ -2854,6 +2954,7 @@ static bool filter_procattr_current(const char *hook, const char *lsm,
     u32 n;
     bool clean_checked = false;
     bool blocked;
+    bool explicit_nonstock;
     bool manager;
     int clean_ret = 0;
     u32 clean_sid = 0;
@@ -2863,9 +2964,17 @@ static bool filter_procattr_current(const char *hook, const char *lsm,
 
     sample[0] = '\0';
     sample_len = value && size ? copy_query_sample(sample, (const char *)value, size) : 0;
+    uid = current_uid();
     manager = current_is_policy_manager();
+    explicit_nonstock = uid >= 10000 && !manager &&
+                        procattr_has_explicit_nonstock_type(sample, sample_len);
     if (!manager) {
-        if (!READ_ONCE(g_clean_policydb) && READ_ONCE(g_clean_policy_blob) &&
+        if (explicit_nonstock) {
+            clean_checked = true;
+            clean_ret = -EINVAL;
+            n = READ_ONCE(g_procattr_nonstock_block_count) + 1;
+            WRITE_ONCE(g_procattr_nonstock_block_count, n);
+        } else if (!READ_ONCE(g_clean_policydb) && READ_ONCE(g_clean_policy_blob) &&
             legacy_should_block_access_query(sample, sample_len)) {
             clean_checked = true;
             clean_ret = -EINVAL;
@@ -2882,14 +2991,13 @@ static bool filter_procattr_current(const char *hook, const char *lsm,
     }
     blocked = !manager && clean_ret == -EINVAL;
 
-    uid = current_uid();
     n = READ_ONCE(g_procattr_current_count) + 1;
     WRITE_ONCE(g_procattr_current_count, n);
 
     if (blocked || n <= PROCATTR_AUDIT_LOG_LIMIT) {
-        pr_info("[selinux_hook] AUDIT /proc/self/attr/current #%u hook=%s lsm=%s uid=%d comm=%s name_ptr=%px value=%px size=%zu sample_len=%zu manager=%d clean_checked=%d clean_ret=%d clean_sid=%u clean_policydb=%px action=%s forced_ret=%d query=\"%s\"\n",
+        pr_info("[selinux_hook] AUDIT /proc/self/attr/current #%u hook=%s lsm=%s uid=%d comm=%s name_ptr=%px value=%px size=%zu sample_len=%zu manager=%d explicit_nonstock=%d clean_checked=%d clean_ret=%d clean_sid=%u clean_policydb=%px action=%s forced_ret=%d query=\"%s\"\n",
                 n, hook ?: "?", lsm ?: "-", uid, current_comm(), name, value, size,
-                sample_len, manager, clean_checked,
+                sample_len, manager, explicit_nonstock, clean_checked,
                 clean_ret, clean_sid, READ_ONCE(g_clean_policydb),
                 blocked ? "block" : "pass", blocked ? -EINVAL : 0, sample);
     }
@@ -3677,13 +3785,14 @@ static long control(const char* args, char* __user out_msg, int outlen) {
                 READ_ONCE(g_clean_policydb) ? 1 : 0,
                 READ_ONCE(g_clean_policy_snapshot_deferred) ? 1 : 0);
     } else if (want_status) {
-        sprintf(echo, "status version=%s blob=%d len=%u policydb=%d deferred=%d hooks=%d\n",
+        sprintf(echo, "status version=%s blob=%d len=%u policydb=%d deferred=%d hooks=%d procattr_nonstock=%u\n",
                 DIRTYDUCK_VERSION,
                 READ_ONCE(g_clean_policy_blob) ? 1 : 0,
                 (unsigned)READ_ONCE(g_clean_policy_len),
                 READ_ONCE(g_clean_policydb) ? 1 : 0,
                 READ_ONCE(g_clean_policy_snapshot_deferred) ? 1 : 0,
-                g_hooks);
+                g_hooks,
+                READ_ONCE(g_procattr_nonstock_block_count));
     } else {
         sprintf(echo, "ok version=%s; ctl warm builds clean-policy baseline\n",
                 DIRTYDUCK_VERSION);

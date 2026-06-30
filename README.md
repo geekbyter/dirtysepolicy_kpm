@@ -48,7 +48,7 @@ itself supports both project layouts.
 The artifact contains:
 
 - `dirtyduck_smoke_0.1.0.kpm`
-- `dirtyduck_selinux_0.1.4.kpm`
+- `dirtyduck_selinux_0.1.5.kpm`
 
 The workflow downloads KernelPatch commit
 `0ceeeb968bef86b48af68640af8b135215dc3399`, which matches the newer
@@ -79,7 +79,7 @@ Outputs are copied to the project root:
 
 ```text
 dirtyduck_smoke_0.1.0.kpm
-dirtyduck_selinux_0.1.4.kpm
+dirtyduck_selinux_0.1.5.kpm
 ```
 
 ## Install And Test Order
@@ -89,7 +89,7 @@ Do not enable boot autoload for a new KPM first.
 1. Load `dirtyduck_smoke_0.1.0.kpm` manually from the KPM manager.
 2. Check kernel logs for `[dirtyduck_smoke] init`.
 3. Reboot once and confirm the device still boots normally.
-4. Load `dirtyduck_selinux_0.1.4.kpm` manually.
+4. Load `dirtyduck_selinux_0.1.5.kpm` manually.
 5. Use the KPM manager control command:
 
 ```sh
